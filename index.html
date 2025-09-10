@@ -174,7 +174,6 @@
     </header>
 
     <main class="container">
-        <!-- Section for Initial Setup -->
         <section id="setup-section">
             <h2>Create a New Trip</h2>
             <p>Start by linking your Google account to create a new expense sheet. Your data stays in your own Google Drive.</p>
@@ -187,7 +186,6 @@
             </div>
         </section>
 
-        <!-- Section for the Main Dashboard (hidden by default) -->
         <section id="dashboard-section" class="hidden">
             <div id="loading-state">Loading trip data...</div>
             <div id="dashboard-content" class="hidden">
@@ -222,7 +220,6 @@
             </div>
         </section>
         
-        <!-- Section for selecting user (hidden by default) -->
         <section id="user-selection-section" class="hidden">
             <h2>Welcome! Who are you?</h2>
             <div id="user-list-container"></div>
@@ -231,7 +228,9 @@
 
     <script>
         // -----------------------------------------------------------------------------
-        // --- ⚠️ IMPORTANT: PASTE YOUR GOOGLE API CREDENTIALS HERE -------------------
+        // --- ⚠️ IMPORTANT: These keys are visible in the public source code. -----
+        // --- This is only safe for applications where the API key and client ID
+        // --- grant access to a user's own data, not a shared backend service.
         // -----------------------------------------------------------------------------
         const API_KEY = 'AIzaSyAoT36fKenWKMTMornUsrDT49UZv8RuLxM';
         const CLIENT_ID = '339379248220-s92gtnetseqmdufpe2ea34jl5rtklic0.apps.googleusercontent.com';
@@ -303,7 +302,7 @@
                 if (resp.error) throw resp;
                 
                 if (spreadsheetId) {
-                     await loadTripData();
+                    await loadTripData();
                 } else {
                     participantSetupDiv.classList.remove('hidden');
                     authorizeButton.classList.add('hidden');
@@ -564,10 +563,7 @@
 
     </script>
     
-    <!-- Google API Script -->
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
-
-
