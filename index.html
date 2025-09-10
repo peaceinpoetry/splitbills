@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitBills - Easy Trip Expenses</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #f1f1f1;
+            --text-color: #333;
+            --bg-color: #f9f9f9;
+            --border-radius: 12px;
+            --box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        section, .card {
+            background: #fff;
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            border-radius: var(--border-radius);
+            border: 1px solid #ccc;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+        }
+
+        button {
+            background: linear-gradient(45deg, #4CAF50, #81C784);
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        h2, h3 {
+            margin-top: 0;
+            color: #444;
+        }
+        
+        fieldset {
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+        }
+        
+        legend {
+            font-weight: 600;
+            padding: 0 0.5rem;
+        }
+        
+        #split-between-container div {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        #split-between-container input[type="checkbox"] {
+            width: auto;
+            margin-right: 12px;
+            height: 18px;
+            width: 18px;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #expense-list li, #summary-list li {
+            padding: 12px;
+            border-bottom: 1px solid var(--secondary-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        #expense-list li:last-child, #summary-list li:last-child {
+            border-bottom: none;
+        }
+
+        .description { font-weight: 600; }
+        .details { font-size: 0.9em; color: #666; }
+
+        .welcome-banner {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.1em;
+            background-color: #e8f5e9;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+        }
+
+        #change-user-button {
+            background: none; border: none; color: var(--primary-color);
+            cursor: pointer; padding: 0; margin: 0 0 0 5px; font-size: 0.9em;
+            width: auto; font-weight: 600;
+        }
+
+        .user-selection-button {
+            display: block; margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>💸 SplitBills</h1>
+    </header>
+
+    <main class="container">
+        <!-- Section for Initial Setup -->
+        <section id="setup-section">
+            <h2>Create a New Trip</h2>
+            <p>Start by linking your Google account to create a new expense sheet. Your data stays in your own Google Drive.</p>
+            <button id="authorize-button" disabled>Loading...</button>
+            <div id="participant-setup" class="hidden">
+                <input type="number" id="num-participants" placeholder="How many people are on the trip?" min="2">
+                <button id="generate-inputs-button">Next</button>
+                <div id="participant-names-container" style="margin-top: 1rem;"></div>
+                <button id="create-trip-button" class="hidden">Create Trip Sheet</button>
+            </div>
+        </section>
+
+        <!-- Section for the Main Dashboard (hidden by default) -->
+        <section id="dashboard-section" class="hidden">
+            <div id="loading-state">Loading trip data...</div>
+            <div id="dashboard-content" class="hidden">
+                <div class="welcome-banner">
+                    <p>Viewing trip as: <strong id="current-user-name"></strong> <button id="change-user-button">(Change)</button></p>
+                </div>
+                
+                <div id="summary-section" class="card">
+                    <h3>📊 Summary: Who Owes Who</h3>
+                    <ul id="summary-list"></ul>
+                </div>
+                
+                <div id="expense-form-section" class="card">
+                    <h3>Add a New Expense</h3>
+                    <form id="add-expense-form">
+                        <input type="text" id="expense-description" placeholder="Description (e.g., Dinner)" required>
+                        <input type="number" id="expense-amount" placeholder="Amount ($)" step="0.01" min="0.01" required>
+                        <label for="expense-payer">Paid by:</label>
+                        <select id="expense-payer" required></select>
+                        <fieldset>
+                            <legend>Split between:</legend>
+                            <div id="split-between-container"></div>
+                        </fieldset>
+                        <button type="submit">Add Expense</button>
+                    </form>
+                </div>
+
+                <div id="history-section" class="card">
+                    <h3>📜 Expense History</h3>
+                    <ul id="expense-list"></ul>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section for selecting user (hidden by default) -->
+        <section id="user-selection-section" class="hidden">
+            <h2>Welcome! Who are you?</h2>
+            <div id="user-list-container"></div>
+        </section>
+    </main>
+
+    <script>
+        // -----------------------------------------------------------------------------
+        // --- ⚠️ IMPORTANT: PASTE YOUR GOOGLE API CREDENTIALS HERE -------------------
+        // -----------------------------------------------------------------------------
+        const API_KEY = 'AIzaSyAoT36fKenWKMTMornUsrDT49UZv8RuLxM';
+        const CLIENT_ID = '339379248220-s92gtnetseqmdufpe2ea34jl5rtklic0.apps.googleusercontent.com';
+        // -----------------------------------------------------------------------------
+
+        // --- DO NOT EDIT BELOW THIS LINE ---
+
+        const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+        let spreadsheetId = null;
+
+        // DOM Elements
+        const authorizeButton = document.getElementById('authorize-button');
+        const createTripButton = document.getElementById('create-trip-button');
+        const generateInputsButton = document.getElementById('generate-inputs-button');
+        const setupSection = document.getElementById('setup-section');
+        const dashboardSection = document.getElementById('dashboard-section');
+        const userSelectionSection = document.getElementById('user-selection-section');
+        const participantSetupDiv = document.getElementById('participant-setup');
+        const dashboardContent = document.getElementById('dashboard-content');
+        const loadingState = document.getElementById('loading-state');
+        const addExpenseForm = document.getElementById('add-expense-form');
+        const changeUserButton = document.getElementById('change-user-button');
+
+        function gapiLoaded() {
+            gapi.load('client', initializeGapiClient);
+        }
+
+        async function initializeGapiClient() {
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: [DISCOVERY_DOC],
+            });
+            gapiInited = true;
+            checkStateAndMaybeEnableButtons();
+        }
+
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '',
+            });
+            gisInited = true;
+            checkStateAndMaybeEnableButtons();
+        }
+
+        function checkStateAndMaybeEnableButtons() {
+            if (gapiInited && gisInited) {
+                authorizeButton.textContent = 'Sign In & Create Trip';
+                authorizeButton.disabled = false;
+                
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('tripId')) {
+                    spreadsheetId = params.get('tripId');
+                    setupSection.classList.add('hidden');
+                    dashboardSection.classList.remove('hidden');
+                    handleAuthClick(true);
+                }
+            }
+        }
+
+        function handleAuthClick(isSilent = false) {
+            tokenClient.callback = async (resp) => {
+                if (resp.error) throw resp;
+                
+                if (spreadsheetId) {
+                     await loadTripData();
+                } else {
+                    participantSetupDiv.classList.remove('hidden');
+                    authorizeButton.classList.add('hidden');
+                }
+            };
+
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({ prompt: isSilent ? '' : 'consent' });
+            } else {
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+
+        function handleGenerateInputs() {
+            const num = document.getElementById('num-participants').value;
+            const container = document.getElementById('participant-names-container');
+            container.innerHTML = '';
+            if (num >= 2) {
+                for (let i = 0; i < num; i++) {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.placeholder = `Participant ${i + 1} Name`;
+                    input.className = 'participant-name-input';
+                    container.appendChild(input);
+                }
+                createTripButton.classList.remove('hidden');
+            }
+        }
+
+        async function handleCreateTrip() {
+            createTripButton.disabled = true;
+            createTripButton.textContent = 'Creating...';
+            
+            const nameInputs = document.querySelectorAll('.participant-name-input');
+            const participants = Array.from(nameInputs).map(input => input.value.trim()).filter(Boolean);
+
+            if (participants.length < 2) {
+                alert('Please enter at least two participant names.');
+                createTripButton.disabled = false;
+                createTripButton.textContent = 'Create Trip Sheet';
+                return;
+            }
+            
+            try {
+                const response = await gapi.client.sheets.spreadsheets.create({
+                    properties: { title: `SplitBills Trip - ${new Date().toLocaleString()}` },
+                    sheets: [{ properties: { title: 'Participants' } }, { properties: { title: 'Expenses' } }]
+                });
+                spreadsheetId = response.result.spreadsheetId;
+
+                await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: spreadsheetId,
+                    resource: {
+                        valueInputOption: 'RAW',
+                        data: [
+                            { range: 'Expenses!A1:E1', values: [['ID', 'Description', 'Amount', 'Payer', 'SplitBetween']] },
+                            { range: 'Participants!A1', values: participants.map(name => [name]) }
+                        ]
+                    }
+                });
+
+                const newUrl = `${window.location.origin}${window.location.pathname}?tripId=${spreadsheetId}`;
+                window.history.pushState({ path: newUrl }, '', newUrl);
+
+                alert(`Trip created! Share this page's URL with your friends.`);
+                setupSection.classList.add('hidden');
+                dashboardSection.classList.remove('hidden');
+                await loadTripData();
+
+            } catch (err) {
+                console.error("Error creating trip:", err);
+                alert(`An error occurred: ${err.result.error.message}`);
+                createTripButton.disabled = false;
+                createTripButton.textContent = 'Create Trip Sheet';
+            }
+        }
+
+        async function loadTripData() {
+            loadingState.classList.remove('hidden');
+            dashboardContent.classList.add('hidden');
+            userSelectionSection.classList.add('hidden');
+
+            try {
+                const participants = await getParticipants();
+                const currentUser = localStorage.getItem(`currentUser_${spreadsheetId}`);
+
+                if (currentUser && participants.includes(currentUser)) {
+                    await renderDashboard(participants, currentUser);
+                } else {
+                    showUserSelection(participants);
+                }
+            } catch (err) {
+                console.error("Error loading trip data:", err);
+                alert('Could not load trip data. The link might be invalid or you may need to sign in again.');
+                window.location.search = '';
+            }
+        }
+
+        function showUserSelection(participants) {
+            const container = document.getElementById('user-list-container');
+            container.innerHTML = '<h2>Welcome! Who are you?</h2>';
+            participants.forEach(name => {
+                const button = document.createElement('button');
+                button.textContent = name;
+                button.className = 'user-selection-button';
+                button.onclick = () => selectUser(name, participants);
+                container.appendChild(button);
+            });
+            dashboardSection.classList.add('hidden');
+            userSelectionSection.classList.remove('hidden');
+        }
+
+        async function selectUser(name, participants) {
+            localStorage.setItem(`currentUser_${spreadsheetId}`, name);
+            userSelectionSection.classList.add('hidden');
+            dashboardSection.classList.remove('hidden');
+            await renderDashboard(participants, name);
+        }
+
+        async function renderDashboard(participants, currentUser) {
+            document.getElementById('current-user-name').textContent = currentUser;
+
+            const payerSelect = document.getElementById('expense-payer');
+            const splitContainer = document.getElementById('split-between-container');
+            payerSelect.innerHTML = '';
+            splitContainer.innerHTML = '';
+
+            participants.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                if (name === currentUser) option.selected = true;
+                payerSelect.appendChild(option);
+
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.innerHTML = `<input type="checkbox" id="split-${name}" value="${name}" checked><label for="split-${name}">${name}</label>`;
+                splitContainer.appendChild(checkboxDiv);
+            });
+            
+            await calculateAndDisplaySummary();
+            
+            loadingState.classList.add('hidden');
+            dashboardContent.classList.remove('hidden');
+        }
+
+        async function handleAddExpense(event) {
+            event.preventDefault();
+            const submitButton = event.target.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+
+            const description = document.getElementById('expense-description').value;
+            const amount = parseFloat(document.getElementById('expense-amount').value);
+            const payer = document.getElementById('expense-payer').value;
+            const splitCheckboxes = document.querySelectorAll('#split-between-container input[type="checkbox"]:checked');
+            const splitBetween = Array.from(splitCheckboxes).map(cb => cb.value);
+
+            if (!description || isNaN(amount) || amount <= 0 || !payer || splitBetween.length === 0) {
+                alert('Please fill out all fields correctly.');
+                submitButton.disabled = false;
+                return;
+            }
+
+            try {
+                await gapi.client.sheets.spreadsheets.values.append({
+                    spreadsheetId: spreadsheetId,
+                    range: 'Expenses!A:E',
+                    valueInputOption: 'USER_ENTERED',
+                    resource: { values: [[new Date().getTime(), description, amount, payer, splitBetween.join(',')]] },
+                });
+                addExpenseForm.reset();
+                document.getElementById('expense-payer').value = localStorage.getItem(`currentUser_${spreadsheetId}`);
+                document.querySelectorAll('#split-between-container input[type="checkbox"]').forEach(cb => cb.checked = true);
+                
+                await calculateAndDisplaySummary();
+            } catch(err) {
+                console.error("Error adding expense:", err);
+                alert('Could not add expense.');
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+
+        async function calculateAndDisplaySummary() {
+            const [participants, expenses] = await Promise.all([getParticipants(), getExpenses()]);
+            
+            const expenseListUl = document.getElementById('expense-list');
+            const summaryListUl = document.getElementById('summary-list');
+            expenseListUl.innerHTML = '';
+            summaryListUl.innerHTML = '';
+
+            if (expenses.length === 0) {
+                expenseListUl.innerHTML = '<li>No expenses added yet. Be the first!</li>';
+            } else {
+                expenses.slice().reverse().forEach(exp => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<div><div class="description">${exp.description}</div><div class="details">Paid by ${exp.payer} - $${exp.amount.toFixed(2)}</div></div><span>Split ${exp.splitBetween.length} ways</span>`;
+                    expenseListUl.appendChild(li);
+                });
+            }
+
+            const balances = participants.reduce((acc, p) => ({ ...acc, [p]: 0 }), {});
+
+            expenses.forEach(exp => {
+                if(balances[exp.payer] !== undefined) balances[exp.payer] += exp.amount;
+                const share = exp.amount / exp.splitBetween.length;
+                exp.splitBetween.forEach(person => {
+                    if(balances[person] !== undefined) balances[person] -= share;
+                });
+            });
+
+            const debtors = Object.entries(balances).filter(([, amt]) => amt < -0.01).map(([name, amount]) => ({ name, amount: -amount }));
+            const creditors = Object.entries(balances).filter(([, amt]) => amt > 0.01).map(([name, amount]) => ({ name, amount }));
+
+            const transactions = [];
+            while (debtors.length > 0 && creditors.length > 0) {
+                const debtor = debtors[0];
+                const creditor = creditors[0];
+                const amount = Math.min(debtor.amount, creditor.amount);
+
+                transactions.push(`<li>${debtor.name} owes ${creditor.name} <strong>$${amount.toFixed(2)}</strong></li>`);
+                debtor.amount -= amount;
+                creditor.amount -= amount;
+                if (debtor.amount < 0.01) debtors.shift();
+                if (creditor.amount < 0.01) creditors.shift();
+            }
+            
+            if (transactions.length === 0) {
+                summaryListUl.innerHTML = '<li>Everyone is settled up! 🎉</li>';
+            } else {
+                summaryListUl.innerHTML = transactions.join('');
+            }
+        }
+
+        async function getParticipants() {
+            const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: 'Participants!A:A' });
+            return res.result.values ? res.result.values.flat() : [];
+        }
+
+        async function getExpenses() {
+            const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: 'Expenses!A2:E' });
+            if (!res.result.values) return [];
+            return res.result.values.map(row => ({
+                id: row[0], description: row[1], amount: parseFloat(row[2]), payer: row[3], splitBetween: row[4].split(','),
+            }));
+        }
+
+        function handleChangeUser() {
+            localStorage.removeItem(`currentUser_${spreadsheetId}`);
+            loadTripData();
+        }
+
+        // --- Event Listeners ---
+        authorizeButton.onclick = () => handleAuthClick(false);
+        generateInputsButton.onclick = handleGenerateInputs;
+        createTripButton.onclick = handleCreateTrip;
+        addExpenseForm.onsubmit = handleAddExpense;
+        changeUserButton.onclick = handleChangeUser;
+
+    </script>
+    
+    <!-- Google API Script -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+</body>
+</html>
+
+
