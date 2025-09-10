@@ -1,0 +1,33 @@
+name: Deploy SplitBills
+
+on:
+  push:
+    branches:
+      - main # or your main branch name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - name: Install dependencies
+        run: npm install googleapis
+
+      - name: Run Google API script
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: |
+          # This is a placeholder. You need to write a Node.js script
+          # that uses the `GOOGLE_CREDENTIALS` to interact with the
+          # Google Sheets API and update your site's data.
+          echo "Your script to interact with Google API goes here."
+          # Example using a simple Node.js script
+          # node your_api_script.js
