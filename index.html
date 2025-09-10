@@ -103,6 +103,12 @@
             color: #444;
         }
         
+        #trip-title-display {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 1.5rem;
+        }
+
         fieldset {
             border: 1px solid #ddd;
             border-radius: var(--border-radius);
@@ -180,6 +186,7 @@
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.5);
             display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
         }
         .modal-content {
             background: white; padding: 2rem; border-radius: var(--border-radius);
@@ -203,7 +210,8 @@
             <p>Start by linking your Google account to create a new expense sheet. Your data stays in your own Google Drive.</p>
             <button id="authorize-button" disabled>Loading...</button>
             <div id="participant-setup" class="hidden">
-                <input type="number" id="num-participants" placeholder="How many people are on the trip?" min="2">
+                <input type="text" id="trip-name" placeholder="Name of the trip (e.g., Miami Vacation)" required>
+                <input type="number" id="num-participants" placeholder="How many people are on the trip?" min="2" required>
                 <button id="generate-inputs-button">Next</button>
                 <div id="participant-names-container" style="margin-top: 1rem;"></div>
                 <button id="create-trip-button" class="hidden">Create Trip Sheet</button>
@@ -213,6 +221,7 @@
         <section id="dashboard-section" class="hidden">
             <div id="loading-state">Loading trip data...</div>
             <div id="dashboard-content" class="hidden">
+                <h2 id="trip-title-display"></h2>
                 <div class="welcome-banner">
                     <p>Viewing trip as: <strong id="current-user-name"></strong> <button id="change-user-button">(Change)</button></p>
                 </div>
@@ -364,6 +373,15 @@
         async function handleCreateTrip() {
             createTripButton.disabled = true;
             createTripButton.textContent = 'Creating...';
+
+            const tripName = document.getElementById('trip-name').value.trim();
+            if (!tripName) {
+                alert('Please enter a name for the trip.');
+                createTripButton.disabled = false;
+                createTripButton.textContent = 'Create Trip Sheet';
+                return;
+            }
+
             const nameInputs = document.querySelectorAll('.participant-name-input');
             const participants = Array.from(nameInputs).map(input => input.value.trim()).filter(Boolean);
 
@@ -375,7 +393,7 @@
             }
             try {
                 const response = await gapi.client.sheets.spreadsheets.create({
-                    properties: { title: `SplitBills Trip - ${new Date().toLocaleString()}` },
+                    properties: { title: tripName },
                     sheets: [{ properties: { title: 'Participants' } }, { properties: { title: 'Expenses' } }]
                 });
                 spreadsheetId = response.result.spreadsheetId;
@@ -408,6 +426,10 @@
             dashboardContent.classList.add('hidden');
             userSelectionSection.classList.add('hidden');
             try {
+                const spreadsheetDetails = await gapi.client.sheets.spreadsheets.get({ spreadsheetId });
+                const tripTitle = spreadsheetDetails.result.properties.title;
+                document.getElementById('trip-title-display').textContent = tripTitle;
+
                 const participants = await getParticipants();
                 const currentUser = localStorage.getItem(`currentUser_${spreadsheetId}`);
                 if (currentUser && participants.includes(currentUser)) {
