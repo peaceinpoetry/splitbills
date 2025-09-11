@@ -410,12 +410,21 @@
                     }
                 });
 
-                // *** THE BUG FIX ***
-                // Instead of trying to manually update the UI, we redirect to the new URL.
-                // The page's existing loading logic will then handle displaying the dashboard correctly.
-                localStorage.setItem(`currentUser_${spreadsheetId}`, participants[0]); // Set creator as default user
+                // *** THE BUG FIX for SINGLE-PAGE TRANSITION ***
+                // Instead of reloading, we'll manually transition the UI state.
                 const newUrl = `${window.location.origin}${window.location.pathname}?tripId=${spreadsheetId}`;
-                window.location.href = newUrl; // Redirect to the newly created trip page
+                window.history.pushState({ path: newUrl }, '', newUrl);
+
+                const currentUser = participants[0]; // Set creator as default user
+                localStorage.setItem(`currentUser_${spreadsheetId}`, currentUser);
+                
+                // Hide setup and show dashboard
+                DOMElements.setupSection.classList.add('hidden');
+                DOMElements.tripTitleDisplay.textContent = tripName;
+                
+                // Now, render the dashboard with the data we already have.
+                // No need to call loadTripData() which re-fetches from the API.
+                renderDashboard(participants, currentUser, []); // Pass empty array for expenses
 
             } catch (err) {
                 console.error("Error creating trip:", err);
@@ -427,7 +436,6 @@
         
         // --- DATA LOADING & STATE MANAGEMENT ---
         async function loadTripData() {
-            // Hide all sections, show loader
             [DOMElements.setupSection, DOMElements.dashboardSection, DOMElements.userSelectionSection, DOMElements.loginPromptSection].forEach(el => el.classList.add('hidden'));
             DOMElements.loadingState.classList.remove('hidden');
             
@@ -436,11 +444,11 @@
                 const tripTitle = spreadsheetDetails.result.properties.title;
                 DOMElements.tripTitleDisplay.textContent = tripTitle;
                 
-                const participants = await getParticipants();
+                const [participants, expenses] = await Promise.all([getParticipants(), getExpenses()]);
                 const currentUser = localStorage.getItem(`currentUser_${spreadsheetId}`);
 
                 if (currentUser && participants.includes(currentUser)) {
-                    await renderDashboard(participants, currentUser);
+                    renderDashboard(participants, currentUser, expenses);
                 } else {
                     showUserSelection(participants, tripTitle);
                 }
@@ -475,27 +483,31 @@
 
         function handleChangeUser() {
             localStorage.removeItem(`currentUser_${spreadsheetId}`);
-            window.location.reload();
+            window.location.reload(); // Simple reload to go back to user selection
         }
 
-        async function renderDashboard(participants, currentUser) {
+        function renderDashboard(participants, currentUser, expenses) {
+            // Setup UI elements like dropdowns and checkboxes
             DOMElements.currentUserDisplay.textContent = currentUser;
             const payerSelect = document.getElementById('expense-payer');
             const splitContainer = document.getElementById('split-between-container');
             payerSelect.innerHTML = '';
             splitContainer.innerHTML = '';
             participants.forEach(name => {
-                // Populate 'Paid by' dropdown
                 const option = document.createElement('option');
                 option.value = name; option.textContent = name;
                 if (name === currentUser) option.selected = true;
                 payerSelect.appendChild(option);
-                // Populate 'Split between' checkboxes
+                
                 const checkboxDiv = document.createElement('div');
                 checkboxDiv.innerHTML = `<input type="checkbox" id="split-${name}" value="${name}" checked><label for="split-${name}">${name}</label>`;
                 splitContainer.appendChild(checkboxDiv);
             });
-            await calculateAndDisplaySummary();
+            
+            // Calculate and display summary and history using the provided data
+            calculateAndDisplaySummary(participants, expenses);
+            
+            // Show the dashboard
             DOMElements.loadingState.classList.add('hidden');
             DOMElements.dashboardSection.classList.remove('hidden');
         }
@@ -522,6 +534,7 @@
             event.preventDefault();
             const submitButton = event.target.querySelector('button[type="submit"]');
             submitButton.disabled = true;
+            // ... (rest of the function is unchanged)
             const description = document.getElementById('expense-description').value;
             const amount = parseFloat(document.getElementById('expense-amount').value);
             const payer = document.getElementById('expense-payer').value;
@@ -540,7 +553,11 @@
                 DOMElements.addExpenseForm.reset();
                 document.getElementById('expense-payer').value = localStorage.getItem(`currentUser_${spreadsheetId}`);
                 document.querySelectorAll('#split-between-container input[type="checkbox"]').forEach(cb => cb.checked = true);
-                await calculateAndDisplaySummary();
+                
+                // After adding, just reload the data to show the new expense
+                const [participants, expenses] = await Promise.all([getParticipants(), getExpenses()]);
+                calculateAndDisplaySummary(participants, expenses);
+
             } catch(err) {
                 console.error("Error adding expense:", err);
                 alert('Could not add expense.');
@@ -555,15 +572,20 @@
                 await gapi.client.sheets.spreadsheets.values.clear({
                     spreadsheetId, range: `Expenses!A${rowIndex}:E${rowIndex}`,
                 });
-                await calculateAndDisplaySummary();
+                // After deleting, reload the data
+                const [participants, expenses] = await Promise.all([getParticipants(), getExpenses()]);
+                calculateAndDisplaySummary(participants, expenses);
             } catch (err) {
                 console.error('Error deleting expense:', err);
                 alert('Could not delete the expense.');
             }
         }
         
-        function openEditModal(expense, participants) {
+        async function openEditModal(expense) {
+            // Note: This needs participants data. We'll fetch it just in case.
+            const participants = await getParticipants();
             document.getElementById('edit-row-index').value = expense.rowIndex;
+            // ... (rest of the function is largely unchanged)
             document.getElementById('edit-expense-description').value = expense.description;
             document.getElementById('edit-expense-amount').value = expense.amount.toFixed(2);
             const payerSelect = document.getElementById('edit-expense-payer');
@@ -584,6 +606,7 @@
 
         async function handleUpdateExpense(event) {
             event.preventDefault();
+            // ... (rest of the function is unchanged, but we'll refactor the end)
             const submitButton = event.target.querySelector('button[type="submit"]');
             submitButton.disabled = true;
             const rowIndex = document.getElementById('edit-row-index').value;
@@ -607,7 +630,11 @@
                     resource: { values: [updatedValues] }
                 });
                 DOMElements.editModal.classList.add('hidden');
-                await calculateAndDisplaySummary();
+                
+                // After updating, reload the data
+                const [participants, updatedExpenses] = await Promise.all([getParticipants(), getExpenses()]);
+                calculateAndDisplaySummary(participants, updatedExpenses);
+
             } catch (err) {
                 console.error('Error updating expense:', err);
                 alert('Could not update the expense.');
@@ -617,8 +644,7 @@
         }
         
         // --- SUMMARY & DISPLAY LOGIC ---
-        async function calculateAndDisplaySummary() {
-            const [participants, expenses] = await Promise.all([getParticipants(), getExpenses()]);
+        function calculateAndDisplaySummary(participants, expenses) {
             const expenseListUl = document.getElementById('expense-list');
             const summaryListUl = document.getElementById('summary-list');
             expenseListUl.innerHTML = ''; summaryListUl.innerHTML = '';
@@ -641,7 +667,7 @@
                             <div class="details">Paid by ${exp.payer} - $${exp.amount.toFixed(2)}</div>
                         </div>
                         ${actionButtons}`;
-                    if (li.querySelector('.edit-btn')) li.querySelector('.edit-btn').onclick = () => openEditModal(exp, participants);
+                    if (li.querySelector('.edit-btn')) li.querySelector('.edit-btn').onclick = () => openEditModal(exp);
                     if (li.querySelector('.delete-btn')) li.querySelector('.delete-btn').onclick = () => handleDeleteExpense(exp.rowIndex);
                     expenseListUl.appendChild(li);
                 });
