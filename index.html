@@ -358,6 +358,11 @@
                     console.warn('Auth error:', resp.error);
                     return;
                 };
+                
+                // THE FIX: Explicitly set the token on the gapi client after successful authentication.
+                // This ensures that all subsequent gapi.client calls are properly authenticated and prevents the login loop.
+                gapi.client.setToken(resp);
+
                 if (spreadsheetId) { 
                     await loadTripData(); 
                 } 
@@ -704,7 +709,7 @@
             try {
                 await gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId, range: `Expenses!A${rowIndex}:E${rowIndex}`,
-                    valueInputOption: 'USER_ENTERED',
+                    valueInputOption: 'USER-ENTERED',
                     resource: { values: [updatedValues] }
                 });
                 editModal.classList.add('hidden');
