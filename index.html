@@ -59,6 +59,13 @@
             display: none !important;
         }
 
+        #loading-state {
+            text-align: center;
+            font-size: 1.2rem;
+            padding: 2rem;
+            color: #555;
+        }
+
         input, select, button {
             width: 100%;
             padding: 14px;
@@ -204,6 +211,8 @@
     </header>
 
     <main class="container">
+        <div id="loading-state" class="hidden">Loading trip data...</div>
+
         <!-- Section 1: Create a new trip -->
         <section id="setup-section">
             <h2>Create a New Trip</h2>
@@ -220,7 +229,6 @@
 
         <!-- Section 2: Dashboard (for logged-in users) -->
         <section id="dashboard-section" class="hidden">
-            <div id="loading-state">Loading trip data...</div>
             <div id="dashboard-content" class="hidden">
                 <h2 id="trip-title-display"></h2>
                 <div class="welcome-banner">
@@ -359,8 +367,6 @@
                     return;
                 };
                 
-                // THE FIX: Explicitly set the token on the gapi client after successful authentication.
-                // This ensures that all subsequent gapi.client calls are properly authenticated and prevents the login loop.
                 gapi.client.setToken(resp);
 
                 if (spreadsheetId) { 
@@ -418,10 +424,9 @@
                 return;
             }
             try {
-                // The creator must be authenticated to create a sheet.
                 if (gapi.client.getToken() === null) {
                     handleAuthClick();
-                    return; // Abort creation, let auth callback handle it.
+                    return; 
                 }
 
                 const response = await gapi.client.sheets.spreadsheets.create({
@@ -442,8 +447,15 @@
                 const newUrl = `${window.location.origin}${window.location.pathname}?tripId=${spreadsheetId}`;
                 window.history.pushState({ path: newUrl }, '', newUrl);
                 alert(`Trip created! Share this page's URL with your friends.`);
-                localStorage.setItem(`currentUser_${spreadsheetId}`, participants[0]);
-                await loadTripData();
+                
+                // FIX: Directly transition to dashboard instead of reloading all data
+                const currentUser = participants[0];
+                localStorage.setItem(`currentUser_${spreadsheetId}`, currentUser);
+                
+                setupSection.classList.add('hidden');
+                document.getElementById('trip-title-display').textContent = tripName;
+                await renderDashboard(participants, currentUser);
+
             } catch (err) {
                 console.error("Error creating trip:", err);
                 alert(`An error occurred: ${err.result?.error?.message || 'Unknown error'}`);
@@ -524,6 +536,7 @@
             await calculateAndDisplaySummary();
             loadingState.classList.add('hidden');
             dashboardSection.classList.remove('hidden');
+            dashboardContent.classList.remove('hidden');
         }
 
         function handleChangeUser() {
