@@ -254,17 +254,17 @@
             </div>
         </section>
         
-        <!-- Section 3: User Selection (for new users) -->
+        <!-- Section 3: User Selection (for new users AFTER login) -->
         <section id="user-selection-section" class="hidden">
             <h2 id="user-selection-title"></h2>
             <p>First, please select your name from the list below.</p>
             <div id="user-list-container"></div>
         </section>
 
-        <!-- Section 4: Login Prompt (after user selects name) -->
+        <!-- Section 4: Login Prompt (for users who are not logged in) -->
         <section id="login-prompt-section" class="hidden">
-            <h2>Almost there, <span id="login-prompt-name"></span>!</h2>
-            <p>To access the shared trip sheet securely, please sign in with your Google account. This is a one-time step for this trip.</p>
+            <h2 id="login-prompt-heading"></h2>
+            <p id="login-prompt-text"></p>
             <button id="final-login-button">Sign In with Google</button>
         </section>
 
@@ -347,7 +347,6 @@
                 if (params.has('tripId')) {
                     spreadsheetId = params.get('tripId');
                     setupSection.classList.add('hidden');
-                    // Try to load data. If it fails due to auth, it will trigger user selection.
                     loadTripData();
                 }
             }
@@ -356,30 +355,22 @@
         function handleAuthClick(isSilent = false) {
             tokenClient.callback = async (resp) => {
                 if (resp.error) {
-                    // This error can happen if the user closes the popup.
-                    // We'll let them try again from the login prompt.
                     console.warn('Auth error:', resp.error);
-                    if (spreadsheetId) {
-                        showLoginPrompt(localStorage.getItem(`selectedUser_${spreadsheetId}`));
-                    }
                     return;
                 };
-                
-                // On successful login, always try to load/reload the trip data
                 if (spreadsheetId) { 
                     await loadTripData(); 
                 } 
-                else { // This branch is for the creator
+                else {
                     participantSetupDiv.classList.remove('hidden');
                     authorizeButton.classList.add('hidden');
                 }
             };
             
-            // If we have a token, we might not need to prompt
             if (gapi.client.getToken() !== null) {
                  tokenClient.requestAccessToken({ prompt: '' });
-            } else { // No token, so we must ask the user
-                 tokenClient.requestAccessToken({ prompt: isSilent ? '' : 'consent' });
+            } else {
+                 tokenClient.requestAccessToken({ prompt: 'consent' });
             }
         }
         
@@ -422,6 +413,12 @@
                 return;
             }
             try {
+                // The creator must be authenticated to create a sheet.
+                if (gapi.client.getToken() === null) {
+                    handleAuthClick();
+                    return; // Abort creation, let auth callback handle it.
+                }
+
                 const response = await gapi.client.sheets.spreadsheets.create({
                     properties: { title: tripName },
                     sheets: [{ properties: { title: 'Participants' } }, { properties: { title: 'Expenses' } }]
@@ -440,8 +437,7 @@
                 const newUrl = `${window.location.origin}${window.location.pathname}?tripId=${spreadsheetId}`;
                 window.history.pushState({ path: newUrl }, '', newUrl);
                 alert(`Trip created! Share this page's URL with your friends.`);
-                // Set creator as the current user
-                localStorage.setItem(`currentUser_${spreadsheetId}`, participants[0]); // Default to first person
+                localStorage.setItem(`currentUser_${spreadsheetId}`, participants[0]);
                 await loadTripData();
             } catch (err) {
                 console.error("Error creating trip:", err);
@@ -453,90 +449,55 @@
         
         // --- DATA LOADING & USER SELECTION FLOW ---
         async function loadTripData() {
-            // Hide all main sections initially
             setupSection.classList.add('hidden');
             dashboardSection.classList.add('hidden');
             userSelectionSection.classList.add('hidden');
             loginPromptSection.classList.add('hidden');
-            
-            // Show loading state while we figure things out
             loadingState.classList.remove('hidden');
             
             try {
-                // This is the crucial API call. It will fail if not authenticated.
                 const spreadsheetDetails = await gapi.client.sheets.spreadsheets.get({ spreadsheetId });
                 const tripTitle = spreadsheetDetails.result.properties.title;
                 document.getElementById('trip-title-display').textContent = tripTitle;
                 
-                // If the above call succeeded, we are authenticated.
                 const participants = await getParticipants();
-                let currentUser = localStorage.getItem(`currentUser_${spreadsheetId}`);
-                
-                // Check if a user has been set. If not, maybe they just logged in.
-                if (!currentUser || !participants.includes(currentUser)) {
-                    currentUser = localStorage.getItem(`selectedUser_${spreadsheetId}`);
-                    localStorage.setItem(`currentUser_${spreadsheetId}`, currentUser);
-                }
+                const currentUser = localStorage.getItem(`currentUser_${spreadsheetId}`);
 
                 if (currentUser && participants.includes(currentUser)) {
                     await renderDashboard(participants, currentUser);
                 } else {
-                    // Should not happen if logic is correct, but as a fallback:
-                    await showUserSelection();
+                    showUserSelection(participants, tripTitle);
                 }
 
             } catch (err) {
-                // The API call failed, likely due to no authentication.
-                console.log("Authentication required. Showing user selection.");
-                // Hide loading state
+                console.log("Authentication required. Showing login prompt.");
                 loadingState.classList.add('hidden');
-                await showUserSelection(); // Start the user selection flow.
+                document.getElementById('login-prompt-heading').textContent = "Welcome!";
+                document.getElementById('login-prompt-text').textContent = "To access this trip's shared expense sheet, please sign in with your Google account.";
+                loginPromptSection.classList.remove('hidden');
             }
         }
 
-        async function showUserSelection() {
-            // To show the list of users, we need read-only access with an API key
-            // This requires a separate call that doesn't need OAuth
-             try {
-                const response = await gapi.client.sheets.spreadsheets.get({
-                    spreadsheetId: spreadsheetId,
-                    fields: 'properties.title,sheets(properties.title,data.rowData.values.formattedValue)'
-                });
+        function showUserSelection(participants, tripTitle) {
+            const container = document.getElementById('user-list-container');
+            container.innerHTML = '';
+            document.getElementById('user-selection-title').textContent = `Welcome to "${tripTitle}"`;
 
-                const tripTitle = response.result.properties.title;
-                const participantsSheet = response.result.sheets.find(s => s.properties.title === 'Participants');
-                const participants = participantsSheet.data[0].rowData.map(row => row.values[0].formattedValue);
-                
-                const container = document.getElementById('user-list-container');
-                container.innerHTML = '';
-                document.getElementById('user-selection-title').textContent = `Welcome to "${tripTitle}"`;
-
-                participants.forEach(name => {
-                    const button = document.createElement('button');
-                    button.textContent = name;
-                    button.className = 'user-selection-button';
-                    button.onclick = () => selectUser(name);
-                    container.appendChild(button);
-                });
-
-                userSelectionSection.classList.remove('hidden');
-
-            } catch (err) {
-                console.error("Could not fetch participants for selection:", err);
-                alert("Could not load trip data. The link may be invalid.");
-            }
+            participants.forEach(name => {
+                const button = document.createElement('button');
+                button.textContent = name;
+                button.className = 'user-selection-button';
+                button.onclick = () => selectUser(name);
+                container.appendChild(button);
+            });
+            
+            loadingState.classList.add('hidden');
+            userSelectionSection.classList.remove('hidden');
         }
 
         function selectUser(name) {
-            // Temporarily store the selected name
-            localStorage.setItem(`selectedUser_${spreadsheetId}`, name);
-            showLoginPrompt(name);
-        }
-        
-        function showLoginPrompt(name) {
-            userSelectionSection.classList.add('hidden');
-            document.getElementById('login-prompt-name').textContent = name;
-            loginPromptSection.classList.remove('hidden');
+            localStorage.setItem(`currentUser_${spreadsheetId}`, name);
+            loadTripData();
         }
 
         async function renderDashboard(participants, currentUser) {
@@ -560,14 +521,9 @@
             dashboardSection.classList.remove('hidden');
         }
 
-        // --- EXPENSE MANAGEMENT (ADD, EDIT, DELETE) ---
-        async function handleAddExpense(event) {
-            event.preventDefault();
-            // ... (rest of the function is unchanged)
-        }
-
-        async function calculateAndDisplaySummary() {
-            // ... (rest of the function is unchanged)
+        function handleChangeUser() {
+            localStorage.removeItem(`currentUser_${spreadsheetId}`);
+            window.location.reload();
         }
 
         async function getParticipants() {
@@ -586,43 +542,6 @@
                 .filter(exp => exp.id && exp.description);
         }
 
-        function openEditModal(expense, participants) {
-            // ... (rest of the function is unchanged)
-        }
-
-        async function handleDeleteExpense(rowIndex) {
-            // ... (rest of the function is unchanged)
-        }
-
-        async function handleUpdateExpense(event) {
-            // ... (rest of the function is unchanged)
-        }
-
-        function handleChangeUser() {
-            localStorage.removeItem(`currentUser_${spreadsheetId}`);
-            localStorage.removeItem(`selectedUser_${spreadsheetId}`);
-            // Force a reload to restart the auth flow
-            window.location.reload();
-        }
-
-        // --- Event Listeners ---
-        authorizeButton.onclick = () => handleAuthClick(false);
-        generateInputsButton.onclick = handleGenerateInputs;
-        createTripButton.onclick = handleCreateTrip;
-        finalLoginButton.onclick = () => handleAuthClick(false);
-        addExpenseForm.onsubmit = handleAddExpense;
-        editExpenseForm.onsubmit = handleUpdateExpense;
-        cancelEditBtn.onclick = () => editModal.classList.add('hidden');
-        changeUserButton.onclick = handleChangeUser;
-
-    </script>
-    
-    <!-- Google API Script -->
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-
-    <!-- Hiding unchanged JS functions for brevity -->
-    <script>
         async function handleAddExpense(event) {
             event.preventDefault();
             const submitButton = event.target.querySelector('button[type="submit"]');
@@ -639,7 +558,7 @@
             }
             try {
                 await gapi.client.sheets.spreadsheets.values.append({
-                    spreadsheetId, range: 'Expenses!A:E', valueInputOption: 'USER_ENTERED',
+                    spreadsheetId, range: 'Expenses!A:E', valueInputOption: 'USER-ENTERED',
                     resource: { values: [[new Date().getTime(), description, amount, payer, splitBetween.join(',')]] },
                 });
                 addExpenseForm.reset();
@@ -797,7 +716,23 @@
                 submitButton.disabled = false;
             }
         }
+
+
+        // --- Event Listeners ---
+        authorizeButton.onclick = () => handleAuthClick(false);
+        generateInputsButton.onclick = handleGenerateInputs;
+        createTripButton.onclick = handleCreateTrip;
+        finalLoginButton.onclick = () => handleAuthClick(false);
+        addExpenseForm.onsubmit = handleAddExpense;
+        editExpenseForm.onsubmit = handleUpdateExpense;
+        cancelEditBtn.onclick = () => editModal.classList.add('hidden');
+        changeUserButton.onclick = handleChangeUser;
+
     </script>
+    
+    <!-- Google API Script -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
 
